@@ -1,0 +1,11 @@
+.venv/
+venv/
+.env
+**/.env
+.env.local
+**/.env.local
+__pycache__/
+*.pyc
+.vscode/
+node_modules/
+.next/
