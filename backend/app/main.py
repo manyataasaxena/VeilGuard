@@ -2,7 +2,12 @@ from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from app.core.database import get_db, redis_client
+from app.core.database import get_db, redis_client, engine, Base
+from app.models import db_models  # noqa: F401 - tables register karne ke liye zaroori
+from app.api import auth
+
+# Neon Postgres mein saari 5 tables auto-create karega
+Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="VeilGuard AI Gateway", version="1.0.0")
 
@@ -14,14 +19,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
+
 
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
-    # 1. Test Neon PostgreSQL + pgvector
     db.execute(text("SELECT 1"))
-    # 2. Test Upstash Redis
     redis_ok = redis_client.ping()
-
     return {
         "status": "ok",
         "service": "VeilGuard Gateway",
