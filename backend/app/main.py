@@ -1,12 +1,12 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database import get_db, redis_client, engine, Base
-from app.models import db_models  # noqa: F401 - tables register karne ke liye zaroori
-from app.api import auth
+from app.models import db_models  # noqa: F401
+from app.api import auth, documents
 
-# Neon Postgres mein saari 5 tables auto-create karega
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="VeilGuard AI Gateway", version="1.0.0")
@@ -20,6 +20,12 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(documents.router)
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health")
