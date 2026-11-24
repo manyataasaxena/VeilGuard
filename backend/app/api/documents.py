@@ -87,3 +87,23 @@ def search_documents(
         "results_count": len(results),
         "results": results,
     }
+
+
+@router.delete("/{doc_id}")
+def delete_document(
+    doc_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="Only ADMIN can delete documents")
+    doc = (
+        db.query(Document)
+        .filter(Document.id == doc_id, Document.org_id == current_user.org_id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    db.delete(doc)
+    db.commit()
+    return {"deleted": doc_id, "filename": doc.filename}

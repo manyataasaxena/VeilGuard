@@ -1,7 +1,19 @@
+import re
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.models.db_models import Document, DocumentChunk
 from app.services.ingestion import get_embeddings_batch
+
+
+def _stage2_rerank_score(query: str, content: str, rrf_score: float) -> float:
+    """Stage-2 lightweight lexical + phrase coverage reranker."""
+    q_terms = [t for t in re.findall(r"[a-z0-9]+", query.lower()) if len(t) > 2]
+    if not q_terms:
+        return rrf_score
+    c_lower = content.lower()
+    hits = sum(1 for t in q_terms if t in c_lower)
+    coverage = hits / len(q_terms)
+    return rrf_score + (0.015 * coverage)
 
 
 def hybrid_rbac_search(
@@ -9,16 +21,10 @@ def hybrid_rbac_search(
     org_id: str,
     user_role: str,
     query: str,
-    top_k: int = 5,
+    top_k: int = 4,
 ) -> list[dict]:
-    """
-    Zero-Leakage Hybrid Search:
-    1) Database query ke andar hi org_id + user_role filter lagta hai.
-    2) Vector search (pgvector) + Keyword search (TSVECTOR) ko RRF se merge karta hai.
-    """
     query_vec = get_embeddings_batch([query])[0]
 
-    # 1. Dense Vector Search (Top 15) — strictly RBAC filtered
     vec_rows = (
         db.query(
             DocumentChunk,
@@ -35,7 +41,6 @@ def hybrid_rbac_search(
         .all()
     )
 
-    # 2. Keyword Full-Text Search (Top 15) — strictly RBAC filtered
     ts_query = func.plainto_tsquery("english", query)
     kw_rows = (
         db.query(
@@ -54,7 +59,6 @@ def hybrid_rbac_search(
         .all()
     )
 
-    # 3. Reciprocal Rank Fusion (RRF) — dono rankings ko combine karo
     rrf_scores: dict[str, dict] = {}
     k = 60
 
@@ -82,5 +86,20 @@ def hybrid_rbac_search(
             }
         rrf_scores[chunk.id]["rrf_score"] += 1.0 / (k + rank)
 
-    ranked = sorted(rrf_scores.values(), key=lambda x: x["rrf_score"], reverse=True)
-    return ranked[:top_k]
+    # Stage-2 Reranking + Duplicate Content Removal
+    for item in rrf_scores.values():
+        item["rerank_score"] = _stage2_rerank_score(query, item["content"], item["rrf_score"])
+
+    sorted_items = sorted(rrf_scores.values(), key=lambda x: x["rerank_score"], reverse=True)
+
+    deduped = []
+    seen_prefixes = set()
+    for item in sorted_items:
+        prefix = item["content"][:100].strip()
+        if prefix not in seen_prefixes:
+            seen_prefixes.add(prefix)
+            deduped.append(item)
+        if len(deduped) >= top_k:
+            break
+
+    return deduped
