@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.core.database import get_db, redis_client, engine, Base
 from app.models import db_models  # noqa: F401
-from app.api import auth, documents
+from app.api import auth, documents, chat, admin
 
 Base.metadata.create_all(bind=engine)
 
@@ -19,8 +19,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Saare routers hamesha app = FastAPI(...) ke NEECHE aate hain
 app.include_router(auth.router)
 app.include_router(documents.router)
+app.include_router(chat.router)
+app.include_router(admin.router)
 
 
 @app.get("/", include_in_schema=False)
