@@ -6,11 +6,12 @@ class Settings(BaseSettings):
     REDIS_URL: str
     GROQ_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
+    HF_TOKEN: str = ""
+    HF_INJECTION_MODEL: str = ""
     JWT_SECRET: str
 
     @property
     def sqlalchemy_database_url(self) -> str:
-        # Neon 'postgresql://' deta hai, hum usse psycopg driver format mein convert kar rahe hain
         url = self.DATABASE_URL.strip()
         if url.startswith("postgresql://"):
             return url.replace("postgresql://", "postgresql+psycopg://", 1)
